@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Linera GoL Recorder",
+  "version": "1.0.0",
+  "description": "Record solutions for Linera Game of Life puzzles",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://apps.linera.net/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://apps.linera.net/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

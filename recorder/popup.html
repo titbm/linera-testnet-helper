@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>GoL Recorder</h1>
+    
+    <div class="status">
+      <div class="status-line">
+        <span class="label">Saved:</span>
+        <span id="saved-count" class="value">0</span>
+      </div>
+    </div>
+
+    <div class="buttons">
+      <button id="save-btn" class="btn btn-primary">Save Solution</button>
+      <button id="export-btn" class="btn btn-success">Export All</button>
+      <button id="clear-btn" class="btn btn-danger">Clear All</button>
+    </div>
+
+    <div class="log-section">
+      <h3>Saved Puzzles:</h3>
+      <div id="puzzle-list" class="puzzle-list"></div>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
