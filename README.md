@@ -1,98 +1,127 @@
-# Linera GoL Solver
+<div align="center">
+  <img src="logo.png" alt="Linera Logo" width="200"/>
+</div>
 
-Расширение Chrome для автоматического решения головоломок Game of Life и автоматизации квестов на Linera Portal.
+# Linera Testnet Helper
 
-## Возможности
+Chrome extension for automating Linera testnet tasks: solving Conway's Game of Life puzzles, claiming quests, and answering learn questions.
 
-### 1. Автоматическое решение GoL головоломок (apps.linera.net)
-- Автоматически определяет текущую головоломку
-- Применяет решение из базы данных
-- Отправляет и проверяет результат
-- Переходит к следующей головоломке
-- Пропускает уже завершенные головоломки
+## ✨ Features
 
-### 2. Автоматический клейм Game of Life квестов (portal.linera.net/quests)
-- Проходится по всем Game of Life челленджам
-- Открывает каждый квест
-- Нажимает "Check Puzzle" для клейма наград
-- Пропускает уже завершенные квесты
+### 🎮 Conway's Game of Life Puzzles Solver
+Automatically solves all Conway's Game of Life puzzles on [apps.linera.net/gol](https://apps.linera.net/gol):
+- Detects current puzzle state
+- Applies pre-calculated solutions
+- Submits and verifies results
+- Automatically proceeds to next puzzle
+- Skips already completed puzzles
 
-### 3. Автоответчик на Learn вопросы (portal.linera.net/learn)
-- Проходится по всем 28 вопросам
-- Автоматически выбирает правильный ответ из базы
-- Отправляет ответы
-- Пропускает уже отвеченные вопросы
+### 🎯 Puzzle's Quests Auto Claim on Portal
+Claims all Game of Life quest rewards on [portal.linera.net/quests](https://portal.linera.net/quests):
+- Iterates through all GoL challenges
+- Opens each quest automatically
+- Clicks "Check Puzzle" to claim rewards
+- Skips already claimed quests
+- **Note**: Puzzles must be solved first on apps.linera.net
 
-## Установка
+### 📚 Questions Auto Answering on Portal
+Automatically answers all 28 learn questions on [portal.linera.net/learn](https://portal.linera.net/learn):
+- Uses pre-loaded correct answers database
+- Submits answers automatically
+- Skips already answered questions
+- Completes all learn modules
 
-1. Скачайте или клонируйте репозиторий
-2. Откройте Chrome и перейдите в `chrome://extensions/`
-3. Включите "Режим разработчика" в правом верхнем углу
-4. Нажмите "Загрузить распакованное расширение"
-5. Выберите папку `solver`
+## 🚀 Installation
 
-## Использование
+1. Download or clone this repository:
+   ```bash
+   git clone https://github.com/titbm/linera-testnet-helper.git
+   ```
 
-### Решение GoL головоломок
-1. Перейдите на https://apps.linera.net/gol/
-2. Войдите в систему (если требуется)
-3. Откройте расширение (нажмите на иконку)
-4. Нажмите "Start Solver"
-5. Расширение автоматически начнет решать головоломки
+2. Open Chrome and navigate to `chrome://extensions/`
 
-### Клейм Game of Life квестов
-1. Перейдите на https://portal.linera.net/quests
-2. Убедитесь, что вы залогинены
-3. **ВАЖНО: Сначала решите все головоломки GoL на apps.linera.net**
-4. Откройте расширение
-5. Нажмите "Claim GoL Quests"
-6. Дождитесь завершения (появится уведомление)
+3. Enable **Developer mode** (toggle in top-right corner)
 
-### Ответы на Learn вопросы
-1. Перейдите на https://portal.linera.net/learn
-2. Убедитесь, что вы залогинены
-3. Откройте расширение
-4. Нажмите "Answer Learn Questions"
-5. Дождитесь завершения (появится уведомление)
+4. Click **Load unpacked**
 
-## Файлы конфигурации
+5. Select the repository root folder
 
-- `gol-solutions.json` - решения для Game of Life головоломок
-- `learn-answers.json` - правильные ответы на все Learn вопросы
+## 📖 Usage
 
-## Структура проекта
+### Solving Conway's Game of Life Puzzles
+
+1. Navigate to [apps.linera.net/gol](https://apps.linera.net/gol)
+2. Connect your wallet if needed
+3. Click the extension icon in Chrome toolbar
+4. Click the **red "Start Solver"** button
+5. The solver will automatically complete all puzzles
+6. Click the **white "Stop Solver"** button to stop
+
+### Claiming Quests
+
+1. **First, complete all Game of Life puzzles** using the solver above
+2. Navigate to [portal.linera.net/quests](https://portal.linera.net/quests)
+3. Ensure you're logged in
+4. Open the extension
+5. Click **"Claim GoL Quests"**
+6. Wait for completion notification
+
+### Answering Learn Questions
+
+1. Navigate to [portal.linera.net/learn](https://portal.linera.net/learn)
+2. Ensure you're logged in
+3. Open the extension
+4. Click **"Answer Learn Questions"**
+5. Wait for completion notification
+
+## 📁 Project Structure
 
 ```
-solver/
-├── manifest.json           # Конфигурация расширения
-├── solver.js              # Основная логика автоматизации
-├── popup.html             # Интерфейс popup
-├── popup.js               # Логика popup
-├── popup.css              # Стили popup
-├── gol-solutions.json     # Решения GoL головоломок
-├── learn-answers.json     # Ответы на Learn вопросы
-└── icons/                 # Иконки расширения
+linera-testnet-helper/
+├── manifest.json          # Extension configuration
+├── solver.js              # Main automation logic
+├── popup.html             # Extension popup interface
+├── popup.js               # Popup logic
+├── popup.css              # Popup styles
+├── gol-solutions.json     # GoL puzzle solutions database
+├── learn-answers.json     # Learn questions answers database
+├── icons/                 # Extension icons
+└── README.md              # This file
 ```
 
-## Важные замечания
+## ⚙️ Button States
 
-1. **Клейм GoL квестов работает только ПОСЛЕ решения головоломок** - сначала используйте "Start Solver" на apps.linera.net
-2. **Убедитесь, что вы залогинены** на соответствующем сайте перед запуском функций
-3. **Не закрывайте вкладку** во время работы автоматизации
-4. **Проверяйте консоль браузера** (F12) для отладочной информации, если что-то не работает
+All buttons have three states:
 
-## Логи и отладка
+- 🔴 **Red** - Ready to start (click to begin)
+- ⚪ **White** - Running (click to stop)
+- ⚫ **Black/Disabled** - Not available (wrong page or not logged in)
 
-Все действия расширения логируются в консоли браузера:
-- `[Solver]` - логи основного решателя GoL
-- `[Quests]` - логи клейма квестов
-- `[Learn]` - логи ответов на вопросы
+## ⚠️ Important Notes
 
-Чтобы увидеть логи:
-1. Нажмите F12 для открытия DevTools
-2. Перейдите на вкладку Console
-3. Запустите нужную функцию
+1. **Complete puzzles before claiming quests** - Use "Start Solver" on apps.linera.net first
+2. **Stay logged in** - Ensure wallet is connected before starting any automation
+3. **Keep tab open** - Don't close or switch tabs during automation
+4. **Check console for logs** - Press F12 to see detailed progress logs
 
-## Лицензия
+## 🐛 Debugging
 
-MIT
+All extension actions are logged to browser console with prefixes:
+- `[Solver]` - GoL puzzle solver logs
+- `[Quests]` - Quest claiming logs  
+- `[Learn]` - Learn questions logs
+
+To view logs:
+1. Press `F12` to open DevTools
+2. Go to Console tab
+3. Run desired function
+
+## 📄 License
+
+MIT License - feel free to use and modify
+
+---
+
+<div align="center">
+  Made for Linera Testnet 🚀
+</div>
