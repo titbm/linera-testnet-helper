@@ -1,48 +1,68 @@
 // DOM elements
-const solverStatusEl = document.getElementById('solver-status');
-const solvedCountEl = document.getElementById('solved-count');
 const currentPuzzleEl = document.getElementById('current-puzzle');
-const startSolverBtn = document.getElementById('start-solver-btn');
+const solvePuzzleBtn = document.getElementById('solve-puzzle-btn');
 const claimGolQuestsBtn = document.getElementById('claim-gol-quests-btn');
 const answerLearnBtn = document.getElementById('answer-learn-btn');
 
 // State tracking
-let isSolverRunning = false;
 let isClaimQuestsRunning = false;
 let isAnswerLearnRunning = false;
 
-// Update solver status
-async function updateSolverStatus() {
+// Update puzzle info
+async function updatePuzzleInfo() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
-  const isLinera = tab.url.includes('apps.linera.net') || tab.url.includes('portal.linera.net');
+  const isGoLPage = tab.url.includes('apps.linera.net/gol');
   
-  if (!isLinera) {
-    solverStatusEl.textContent = 'N/A';
-    solverStatusEl.style.color = '#888';
-    currentPuzzleEl.textContent = 'Not on Linera site';
-    startSolverBtn.disabled = true;
-    claimGolQuestsBtn.disabled = true;
-    answerLearnBtn.disabled = true;
+  if (!isGoLPage) {
+    currentPuzzleEl.textContent = 'Not on GoL page';
+    currentPuzzleEl.style.color = '#888';
+    solvePuzzleBtn.disabled = true;
+    solvePuzzleBtn.textContent = 'Solve This Puzzle';
+    solvePuzzleBtn.className = 'btn btn-primary';
     return;
   }
   
-  // Check running state from content script
   try {
-    const response = await chrome.tabs.sendMessage(tab.id, { action: 'GET_SOLVER_STATUS' });
+    const info = await chrome.tabs.sendMessage(tab.id, { action: 'GET_PUZZLE_INFO' });
     
-    // Update local state from content script
-    isSolverRunning = response.isRunning;
-    isClaimQuestsRunning = response.isRunning && tab.url.includes('/quests');
-    isAnswerLearnRunning = response.isRunning && tab.url.includes('/learn');
+    if (!info.puzzleId) {
+      currentPuzzleEl.textContent = 'No puzzle detected';
+      currentPuzzleEl.style.color = '#888';
+      solvePuzzleBtn.disabled = true;
+      solvePuzzleBtn.textContent = 'Solve This Puzzle';
+      solvePuzzleBtn.className = 'btn btn-primary';
+    } else if (info.isCompleted) {
+      currentPuzzleEl.textContent = info.puzzleId + ' ✓';
+      currentPuzzleEl.style.color = '#4CAF50';
+      solvePuzzleBtn.disabled = true;
+      solvePuzzleBtn.textContent = 'Already Completed';
+      solvePuzzleBtn.className = 'btn btn-primary';
+    } else if (!info.hasSolution) {
+      currentPuzzleEl.textContent = info.puzzleId + ' (no solution)';
+      currentPuzzleEl.style.color = '#ff9800';
+      solvePuzzleBtn.disabled = true;
+      solvePuzzleBtn.textContent = 'No Solution Available';
+      solvePuzzleBtn.className = 'btn btn-primary';
+    } else {
+      currentPuzzleEl.textContent = info.puzzleId;
+      currentPuzzleEl.style.color = '#fff';
+      solvePuzzleBtn.disabled = false;
+      solvePuzzleBtn.textContent = 'Solve This Puzzle';
+      solvePuzzleBtn.className = 'btn btn-primary';
+    }
+    
   } catch (error) {
-    // Content script not loaded or error
-    isSolverRunning = false;
-    isClaimQuestsRunning = false;
-    isAnswerLearnRunning = false;
+    currentPuzzleEl.textContent = 'Error loading info';
+    currentPuzzleEl.style.color = '#f44336';
+    solvePuzzleBtn.disabled = true;
   }
+}
+
+// Update quest buttons status
+async function updateQuestButtons() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
-  // Enable quest buttons on specific portal pages
   if (tab.url.includes('portal.linera.net')) {
     // Enable Claim GoL Quests only on /quests page
     claimGolQuestsBtn.disabled = !tab.url.includes('/quests');
@@ -67,115 +87,42 @@ async function updateSolverStatus() {
     claimGolQuestsBtn.disabled = true;
     answerLearnBtn.disabled = true;
   }
-  
-  // Enable solver buttons on apps.linera.net
-  if (tab.url.includes('apps.linera.net')) {
-    try {
-      const response = await chrome.tabs.sendMessage(tab.id, { action: 'GET_SOLVER_STATUS' });
-      
-      isSolverRunning = response.isRunning;
-      
-      if (response.isRunning) {
-        solverStatusEl.textContent = 'Running';
-        solverStatusEl.style.color = '#4CAF50';
-        startSolverBtn.textContent = 'Stop Solver';
-        startSolverBtn.className = 'btn btn-stop';
-        startSolverBtn.disabled = false;
-      } else {
-        solverStatusEl.textContent = 'Stopped';
-        solverStatusEl.style.color = '#888';
-        startSolverBtn.textContent = 'Start Solver';
-        startSolverBtn.className = 'btn btn-primary';
-        startSolverBtn.disabled = false;
-      }
-      
-      solvedCountEl.textContent = response.solvedCount || 0;
-      currentPuzzleEl.textContent = response.currentPuzzle || '-';
-      
-    } catch (error) {
-      // Solver not loaded yet or error
-      solverStatusEl.textContent = 'Ready';
-      solverStatusEl.style.color = '#888';
-      startSolverBtn.textContent = 'Start Solver';
-      startSolverBtn.className = 'btn btn-primary';
-      startSolverBtn.disabled = false;
-      solvedCountEl.textContent = '0';
-      currentPuzzleEl.textContent = '-';
-      isSolverRunning = false;
-    }
-  } else {
-    // On portal, disable solver buttons
-    startSolverBtn.disabled = true;
-    solverStatusEl.textContent = 'N/A';
-    solverStatusEl.style.color = '#888';
-    currentPuzzleEl.textContent = 'Use on apps.linera.net';
-  }
 }
 
-// Toggle solver (Start/Stop)
-startSolverBtn.addEventListener('click', async () => {
+// Solve current puzzle
+solvePuzzleBtn.addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
-  if (!tab.url.includes('apps.linera.net')) {
-    alert('Please navigate to apps.linera.net first');
+  if (!tab.url.includes('apps.linera.net/gol')) {
+    alert('Please navigate to a Game of Life puzzle first');
     return;
   }
   
-  if (isSolverRunning) {
-    // Stop solver
-    startSolverBtn.disabled = true;
-    try {
-      await chrome.tabs.sendMessage(tab.id, { action: 'STOP_SOLVER' });
-      await updateSolverStatus();
-    } catch (error) {
-      alert('Error stopping solver: ' + error.message);
-    } finally {
-      startSolverBtn.disabled = false;
-    }
-  } else {
-    // Start solver
-    startSolverBtn.textContent = 'Starting...';
-    startSolverBtn.disabled = true;
+  solvePuzzleBtn.disabled = true;
+  solvePuzzleBtn.textContent = 'Solving...';
+  
+  try {
+    const response = await chrome.tabs.sendMessage(tab.id, { 
+      action: 'SOLVE_CURRENT_PUZZLE' 
+    });
     
-    try {
-      const response = await chrome.tabs.sendMessage(tab.id, { action: 'START_SOLVER' });
-      
-      if (!response.success) {
-        alert('Error starting solver: ' + response.error);
-        return;
-      }
-      
-      await updateSolverStatus();
-      
-      // Update status periodically
-      const intervalId = setInterval(async () => {
-        await updateSolverStatus();
-        
-        // Check if solver is still running
-        try {
-          const status = await chrome.tabs.sendMessage(tab.id, { action: 'GET_SOLVER_STATUS' });
-          if (!status.isRunning) {
-            clearInterval(intervalId);
-          }
-        } catch {
-          clearInterval(intervalId);
-        }
-      }, 2000);
-      
-    } catch (error) {
-      alert('Error: ' + error.message);
-    } finally {
-      startSolverBtn.disabled = false;
+    if (!response.success) {
+      alert('❌ Error: ' + response.error);
     }
+    
+  } catch (error) {
+    alert('❌ Error: ' + error.message);
+  } finally {
+    await updatePuzzleInfo();
   }
 });
 
-// Toggle Claim GoL Quests (Start/Stop)
+// Claim GoL Quests
 claimGolQuestsBtn.addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
-  if (!tab.url.includes('portal.linera.net')) {
-    alert('Please navigate to portal.linera.net first');
+  if (!tab.url.includes('portal.linera.net/quests')) {
+    alert('Please navigate to portal.linera.net/quests first');
     return;
   }
   
@@ -192,20 +139,20 @@ claimGolQuestsBtn.addEventListener('click', async () => {
   } else {
     // Start claiming quests
     isClaimQuestsRunning = true;
-    claimGolQuestsBtn.textContent = 'Stop Claiming';
+    claimGolQuestsBtn.textContent = 'Claiming...';
     claimGolQuestsBtn.className = 'btn btn-stop';
     
     try {
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'CLAIM_GOL_QUESTS' });
       
       if (!response.success) {
-        alert('Error claiming quests: ' + response.error);
+        alert('❌ Error: ' + response.error);
       } else {
-        alert('Successfully claimed Game of Life quests!');
+        alert('✅ Successfully claimed Game of Life quests!');
       }
       
     } catch (error) {
-      alert('Error: ' + error.message);
+      alert('❌ Error: ' + error.message);
     } finally {
       isClaimQuestsRunning = false;
       claimGolQuestsBtn.textContent = 'Claim GoL Quests';
@@ -214,12 +161,12 @@ claimGolQuestsBtn.addEventListener('click', async () => {
   }
 });
 
-// Toggle Answer Learn Questions (Start/Stop)
+// Answer Learn Questions
 answerLearnBtn.addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   
-  if (!tab.url.includes('portal.linera.net')) {
-    alert('Please navigate to portal.linera.net first');
+  if (!tab.url.includes('portal.linera.net/learn')) {
+    alert('Please navigate to portal.linera.net/learn first');
     return;
   }
   
@@ -236,20 +183,20 @@ answerLearnBtn.addEventListener('click', async () => {
   } else {
     // Start answering questions
     isAnswerLearnRunning = true;
-    answerLearnBtn.textContent = 'Stop Answering';
+    answerLearnBtn.textContent = 'Answering...';
     answerLearnBtn.className = 'btn btn-stop';
     
     try {
       const response = await chrome.tabs.sendMessage(tab.id, { action: 'ANSWER_LEARN_QUESTIONS' });
       
       if (!response.success) {
-        alert('Error answering questions: ' + response.error);
+        alert('❌ Error: ' + response.error);
       } else {
-        alert('Successfully answered Learn questions!');
+        alert('✅ Successfully answered Learn questions!');
       }
       
     } catch (error) {
-      alert('Error: ' + error.message);
+      alert('❌ Error: ' + error.message);
     } finally {
       isAnswerLearnRunning = false;
       answerLearnBtn.textContent = 'Answer Learn Questions';
@@ -258,8 +205,12 @@ answerLearnBtn.addEventListener('click', async () => {
   }
 });
 
-// Load on popup open
-updateSolverStatus();
+// Update on popup open
+updatePuzzleInfo();
+updateQuestButtons();
 
-// Update status every 3 seconds while popup is open
-setInterval(updateSolverStatus, 3000);
+// Update every 2 seconds
+setInterval(() => {
+  updatePuzzleInfo();
+  updateQuestButtons();
+}, 2000);

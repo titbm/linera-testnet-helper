@@ -1,51 +1,46 @@
-// Auto-solver for Linera Game of Life puzzles
-// This script loads solutions from gol-solutions.json and automatically solves puzzles
+// Simplified solver for Linera Game of Life puzzles
+// This script solves only the current puzzle on button click
 
 // Configuration
 const SOLUTIONS_URL = chrome.runtime.getURL('gol-solutions.json');
 const LEARN_ANSWERS_URL = chrome.runtime.getURL('learn-answers.json');
 const DELAY_BETWEEN_CLICKS = 100; // ms between cell clicks
-const DELAY_AFTER_SUBMIT = 2000; // ms to wait after successful submission before next puzzle
 const DELAY_BETWEEN_QUESTS = 1500; // ms to wait between processing quests
 
 // State
 let isRunning = false;
 let solutions = null;
 let learnAnswers = null;
-let solvedPuzzles = new Set();
-let currentPuzzleId = null;
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'START_SOLVER') {
-    startSolver()
-      .then(() => sendResponse({ success: true }))
+  if (message.action === 'SOLVE_CURRENT_PUZZLE') {
+    solveCurrentPuzzle()
+      .then((result) => sendResponse({ success: true, ...result }))
       .catch(error => sendResponse({ success: false, error: error.message }));
     return true;
-  } else if (message.action === 'STOP_SOLVER') {
-    stopSolver();
-    sendResponse({ success: true });
-    return true;
-  } else if (message.action === 'GET_SOLVER_STATUS') {
-    sendResponse({ 
-      isRunning, 
-      solvedCount: solvedPuzzles.size,
-      currentPuzzle: getPuzzleId() || 'N/A'
-    });
+  } else if (message.action === 'GET_PUZZLE_INFO') {
+    getPuzzleInfo()
+      .then((info) => sendResponse(info))
+      .catch(error => sendResponse({ puzzleId: null, error: error.message }));
     return true;
   } else if (message.action === 'CLAIM_GOL_QUESTS') {
-    isRunning = true; // Enable running flag for stopping
+    isRunning = true;
     claimGameOfLifeQuests()
       .then(() => sendResponse({ success: true }))
       .catch(error => sendResponse({ success: false, error: error.message }))
       .finally(() => { isRunning = false; });
     return true;
   } else if (message.action === 'ANSWER_LEARN_QUESTIONS') {
-    isRunning = true; // Enable running flag for stopping
+    isRunning = true;
     answerLearnQuestions()
       .then(() => sendResponse({ success: true }))
       .catch(error => sendResponse({ success: false, error: error.message }))
       .finally(() => { isRunning = false; });
+    return true;
+  } else if (message.action === 'STOP_SOLVER') {
+    isRunning = false;
+    sendResponse({ success: true });
     return true;
   }
 });
@@ -57,290 +52,12 @@ async function loadSolutions() {
   try {
     const response = await fetch(SOLUTIONS_URL);
     solutions = await response.json();
-    console.log('[Solver] Loaded solutions:', Object.keys(solutions));
+    console.log('[Solver] Loaded solutions:', Object.keys(solutions).length, 'puzzles');
     return solutions;
   } catch (error) {
-
+    console.error('[Solver] Failed to load solutions:', error);
     throw new Error('Failed to load solutions file');
   }
-}
-
-// Initialize solver based on current page state
-async function initializeFromCurrentState() {
-
-  
-  // Check if user is not logged in
-  if (isWaitingForLogin()) {
-
-    
-    // Click the Log In button
-    if (!clickLoginButton()) {
-
-    }
-    
-
-    await waitForLogin();
-
-    await sleep(2000); // Wait for page to fully load after login
-  }
-  
-  // Check if we're on a puzzle page
-  const puzzleId = getPuzzleId();
-  
-  if (puzzleId) {
-
-    currentPuzzleId = puzzleId;
-    
-    // If puzzle is already completed, navigate away
-    if (await isPuzzleCompleted()) {
-
-      await navigateToPuzzleList();
-      await sleep(2000);
-    }
-  } else {
-
-  }
-}
-
-// Click the Log In button
-function clickLoginButton() {
-  const buttons = document.querySelectorAll('button');
-  
-  for (const button of buttons) {
-    const text = button.textContent.toLowerCase().trim();
-    if (text.includes('log in') || text === 'login') {
-
-      button.click();
-      return true;
-    }
-  }
-  
-  return false;
-}
-
-// Check if waiting for login
-function isWaitingForLogin() {
-  const bodyText = document.body.innerText;
-  return bodyText.includes('Please connect your wallet') || 
-         bodyText.includes('Connecting to wallet') || 
-         bodyText.includes('Connect wallet') ||
-         bodyText.includes('Connect Wallet') ||
-         bodyText.includes('Log In');
-}
-
-// Wait for user to login
-async function waitForLogin() {
-  const maxWait = 300000; // 5 minutes max wait
-  const checkInterval = 1000;
-  let elapsed = 0;
-  
-
-  
-  while (elapsed < maxWait && isRunning) {
-    // Check if login screen is gone
-    const bodyText = document.body.innerText;
-    
-    // Login is complete when we no longer see login prompts
-    // and we see either the puzzle list or a puzzle page
-    const stillWaitingForLogin = bodyText.includes('Please connect your wallet') || 
-                                  bodyText.includes('Connecting to wallet');
-    
-    if (!stillWaitingForLogin) {
-      // Check if content loaded
-      if (bodyText.includes('Choose Your Challenge') || 
-          bodyText.includes('Conway\'s Game of Life') ||
-          getPuzzleId()) {
-
-        return true;
-      }
-    }
-    
-    await sleep(checkInterval);
-    elapsed += checkInterval;
-    
-    // Log progress every 10 seconds
-    if (elapsed % 10000 === 0) {
-      console.log(`[Solver] Still waiting for login... (${elapsed/1000}s)`);
-    }
-  }
-  
-  if (!isRunning) {
-    throw new Error('Solver stopped while waiting for login');
-  }
-  
-  throw new Error('Login timeout - user did not connect wallet');
-}
-
-// Navigate to puzzle list
-async function navigateToPuzzleList() {
-
-  
-  const buttons = document.querySelectorAll('button');
-  
-  for (const button of buttons) {
-    const text = button.textContent.toLowerCase().trim();
-    if (text === 'back to puzzles') {
-
-      button.click();
-      await sleep(1500);
-      return true;
-    }
-  }
-  
-  // If no button found, try navigating to main page
-
-  window.location.href = '/gol/index.html';
-  await sleep(2000);
-  return true;
-}
-
-// Start the auto-solver
-async function startSolver() {
-  if (isRunning) {
-
-    return;
-  }
-  
-
-  isRunning = true;
-  
-  try {
-    await loadSolutions();
-    
-    // Initialize based on current page state
-    await initializeFromCurrentState();
-    
-    await solverLoop();
-  } catch (error) {
-
-    isRunning = false;
-    throw error;
-  }
-}
-
-// Stop the solver
-function stopSolver() {
-
-  isRunning = false;
-}
-
-// Main solver loop
-async function solverLoop() {
-  while (isRunning) {
-    try {
-      // Get current puzzle ID
-      const puzzleId = getPuzzleId();
-      if (!puzzleId) {
-
-        
-        // If we're on the puzzle list, select the first unsolved puzzle
-        const bodyText = document.body.innerText;
-        if (bodyText.includes('Choose Your Challenge')) {
-
-          const moved = await selectNextUnsolvedPuzzle();
-          if (!moved) {
-
-            stopSolver();
-            break;
-          }
-          await sleep(2000);
-          continue;
-        }
-        
-
-        await sleep(1000);
-        continue;
-      }
-      
-      // Check if we're stuck on the same puzzle
-      if (currentPuzzleId === puzzleId && solvedPuzzles.has(puzzleId)) {
-
-        const moved = await goToNextPuzzle();
-        if (!moved) {
-
-          stopSolver();
-          break;
-        }
-        await sleep(2000);
-        continue;
-      }
-      
-      currentPuzzleId = puzzleId;
-
-      
-      // Check if already completed
-      if (await isPuzzleCompleted()) {
-
-        solvedPuzzles.add(puzzleId);
-        const moved = await goToNextPuzzle();
-        if (!moved) {
-
-          stopSolver();
-          break;
-        }
-        await sleep(2000);
-        continue;
-      }
-      
-      // Check if we have a solution
-      const solution = solutions[puzzleId];
-      if (!solution) {
-
-        const moved = await goToNextPuzzle();
-        if (!moved) {
-
-          stopSolver();
-          break;
-        }
-        await sleep(2000);
-        continue;
-      }
-      
-      // Solve the puzzle
-
-      await solvePuzzle(solution);
-      
-      // Submit solution
-      await submitSolution();
-      
-      // Wait for success message
-      const success = await waitForSubmissionResult();
-      
-      if (success) {
-
-        solvedPuzzles.add(puzzleId);
-        
-        // Wait for next button to appear
-        await sleep(1000);
-        
-        // Try to move to next puzzle
-        const moved = await goToNextPuzzle();
-        if (!moved) {
-
-          stopSolver();
-          break;
-        }
-        
-        // Wait for new puzzle to load
-        await sleep(2000);
-      } else {
-
-        const moved = await goToNextPuzzle();
-        if (!moved) {
-
-          stopSolver();
-          break;
-        }
-        await sleep(2000);
-      }
-      
-    } catch (error) {
-
-      await sleep(2000);
-    }
-  }
-  
-
 }
 
 // Get puzzle ID from page
@@ -350,6 +67,7 @@ function getPuzzleId() {
   for (const heading of headings) {
     const text = heading.textContent.trim();
     
+    // Skip common non-puzzle headings
     if (text === 'Conway\'s Game of Life' || 
         text === 'Game of Life' || 
         text === 'Puzzles' ||
@@ -359,6 +77,7 @@ function getPuzzleId() {
       continue;
     }
     
+    // Convert to ID format
     return text.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   }
   
@@ -366,10 +85,24 @@ function getPuzzleId() {
 }
 
 // Check if puzzle is already completed
-async function isPuzzleCompleted() {
-  // Look for "Puzzle already completed!" message
+function isPuzzleCompleted() {
   const messages = document.body.innerText;
   return messages.includes('Puzzle already completed!');
+}
+
+// Get current puzzle info
+async function getPuzzleInfo() {
+  await loadSolutions();
+  
+  const puzzleId = getPuzzleId();
+  const isCompleted = isPuzzleCompleted();
+  const hasSolution = puzzleId && solutions && solutions[puzzleId] ? true : false;
+  
+  return {
+    puzzleId: puzzleId || null,
+    isCompleted: isCompleted,
+    hasSolution: hasSolution
+  };
 }
 
 // Find the puzzle grid
@@ -391,6 +124,7 @@ function findPuzzleGrid() {
     const rowCount = rows.split(' ').filter(x => x).length;
     const childCount = el.children.length;
     
+    // Game of Life grids are at least 4x4
     if (childCount >= 16 && colCount >= 4 && rowCount >= 4) {
       return el;
     }
@@ -406,15 +140,14 @@ async function solvePuzzle(solution) {
     throw new Error('Puzzle grid not found');
   }
   
-
+  console.log('[Solver] Found puzzle grid');
   
   // Get all clickable cells
   const cells = grid.querySelectorAll('div[tabindex="0"]');
+  console.log('[Solver] Found', cells.length, 'clickable cells');
   
   // Click each cell in the solution
   for (const cellCoord of solution.cells) {
-    if (!isRunning) break;
-    
     const { row, col } = cellCoord;
     
     // Find cell by grid-area
@@ -434,18 +167,17 @@ async function solvePuzzle(solution) {
     }
   }
   
-
+  console.log('[Solver] Finished clicking cells');
 }
 
 // Submit solution
 async function submitSolution() {
-  // Look for Submit or Resubmit button
   const buttons = document.querySelectorAll('button');
   
   for (const button of buttons) {
     const text = button.textContent.toLowerCase();
     if (text.includes('submit solution') || text.includes('resubmit solution')) {
-
+      console.log('[Solver] Clicking submit button');
       button.click();
       await sleep(500);
       return;
@@ -455,118 +187,51 @@ async function submitSolution() {
   throw new Error('Submit button not found');
 }
 
-// Wait for submission result
-async function waitForSubmissionResult() {
-  const maxWait = 5000; // 5 seconds
-  const checkInterval = 200;
-  let elapsed = 0;
-  
-  while (elapsed < maxWait) {
-    const text = document.body.innerText;
+
+
+// Solve current puzzle
+async function solveCurrentPuzzle() {
+  try {
+    await loadSolutions();
     
-    if (text.includes('Solution submitted successfully!')) {
-      return true;
+    // Get current puzzle ID
+    const puzzleId = getPuzzleId();
+    if (!puzzleId) {
+      throw new Error('Not on a puzzle page');
     }
     
-    if (text.includes('incorrect') || text.includes('failed')) {
-      return false;
+    console.log('[Solver] Current puzzle:', puzzleId);
+    
+    // Find solution
+    const solution = solutions[puzzleId];
+    if (!solution) {
+      throw new Error('No solution found for: ' + puzzleId);
     }
     
-    await sleep(checkInterval);
-    elapsed += checkInterval;
+    console.log('[Solver] Found solution with', solution.cells.length, 'cells');
+    
+    // Check if already completed - just fill cells, don't submit
+    const isCompleted = isPuzzleCompleted();
+    
+    // Solve the puzzle (fill cells)
+    console.log('[Solver] Filling puzzle cells...');
+    await solvePuzzle(solution);
+    
+    // Submit solution only if not already completed
+    if (!isCompleted) {
+      console.log('[Solver] Submitting solution...');
+      await submitSolution();
+      console.log('[Solver] ✅ Solution submitted!');
+    } else {
+      console.log('[Solver] ✅ Cells filled (puzzle already completed)');
+    }
+    
+    return { success: true, message: 'Puzzle solved successfully!' };
+    
+  } catch (error) {
+    console.error('[Solver] Error:', error);
+    throw error;
   }
-  
-  return false;
-}
-
-// Go to next puzzle
-async function goToNextPuzzle() {
-
-  
-  // Look for "Next puzzle" button (the most reliable way)
-  const buttons = document.querySelectorAll('button');
-  
-  for (const button of buttons) {
-    const text = button.textContent.toLowerCase().trim();
-    if (text === 'next puzzle') {
-
-      button.click();
-      await sleep(2000);
-      
-      // Verify we moved to a different puzzle
-      const newPuzzleId = getPuzzleId();
-      if (newPuzzleId && newPuzzleId !== currentPuzzleId) {
-
-        return true;
-      }
-
-    }
-  }
-  
-  // If no "Next puzzle" button found, go back to puzzle list and select next unsolved puzzle
-
-  
-  if (!await navigateToPuzzleList()) {
-    return false;
-  }
-  
-  // Now we should be on the puzzle list page, find next unsolved puzzle
-  return await selectNextUnsolvedPuzzle();
-}
-
-// Select next unsolved puzzle from the list
-async function selectNextUnsolvedPuzzle() {
-
-  
-  await sleep(1000);
-  const puzzleButtons = document.querySelectorAll('button');
-  
-  // Try to find and click on an unsolved puzzle
-  for (const button of puzzleButtons) {
-    // Extract puzzle name from button text (usually the first heading in the button)
-    const heading = button.querySelector('h3, h2, h1');
-    if (!heading) continue;
-    
-    const puzzleName = heading.textContent.trim();
-    const id = puzzleName.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-    
-    // Skip if we already solved it in this session
-    if (solvedPuzzles.has(id)) {
-      console.log('[Solver] Skipping already solved (session):', id);
-      continue;
-    }
-    
-    // Check for the green checkmark SVG icon
-    const hasCheckmark = button.querySelector('svg.lucide-circle-check-big') ||
-                         button.querySelector('svg.lucide-circle-check') ||
-                         button.querySelector('.lucide-circle-check') ||
-                         button.querySelector('svg.text-green-600') ||
-                         button.querySelector('.text-green-600') ||
-                         button.querySelector('[class*="circle-check"]');
-    
-    if (hasCheckmark) {
-      console.log('[Solver] Skipping completed puzzle (has checkmark):', puzzleName);
-      solvedPuzzles.add(id); // Add to solved list
-      continue;
-    }
-    
-    // Check if we have a solution for this puzzle
-    if (solutions && solutions[id]) {
-
-      button.click();
-      await sleep(2000);
-      
-      // Verify we moved to a different puzzle
-      const newPuzzleId = getPuzzleId();
-      if (newPuzzleId && newPuzzleId !== currentPuzzleId) {
-
-        return true;
-      }
-    }
-  }
-  
-
-  return false;
 }
 
 // Utility: sleep
@@ -574,24 +239,7 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// ===== NEW FUNCTIONS FOR QUESTS AND LEARN =====
-
-// Load learn answers from JSON
-async function loadLearnAnswers() {
-  if (learnAnswers) return learnAnswers;
-  
-  try {
-    const response = await fetch(LEARN_ANSWERS_URL);
-    learnAnswers = await response.json();
-    console.log('[Quests] Loaded learn answers:', Object.keys(learnAnswers));
-    return learnAnswers;
-  } catch (error) {
-
-    throw new Error('Failed to load learn answers file');
-  }
-}
-
-// ==================== NEW QUEST AUTOMATION FUNCTIONS ====================
+// ==================== QUEST AUTOMATION FUNCTIONS ====================
 
 // Load learn answers from JSON
 async function loadLearnAnswers() {
@@ -603,14 +251,14 @@ async function loadLearnAnswers() {
     console.log('[Learn] Loaded answers for', Object.keys(learnAnswers).length, 'questions');
     return learnAnswers;
   } catch (error) {
-
+    console.error('[Learn] Failed to load answers:', error);
     throw new Error('Failed to load learn answers file');
   }
 }
 
 // Claim Game of Life Quests on portal.linera.net/quests
 async function claimGameOfLifeQuests() {
-
+  console.log('[Quests] Starting quest claiming...');
   
   try {
     // Check if we're on the quests page
@@ -620,35 +268,31 @@ async function claimGameOfLifeQuests() {
     
     // Navigate to quests page if not already there
     if (!window.location.pathname.includes('/quests')) {
-
+      console.log('[Quests] Navigating to /quests...');
       window.location.href = '/quests';
       await sleep(3000);
     }
     
     // Wait for page to load
-
+    console.log('[Quests] Waiting for page to load...');
     await sleep(3000);
     
-    // Find all clickable quest cards by looking for h4 and finding their clickable parent
-
+    // Find all clickable quest cards
+    console.log('[Quests] Finding Game of Life quests...');
     const allH4 = document.querySelectorAll('h4');
     const questButtons = [];
     
     for (const h4 of allH4) {
       const headingText = h4.textContent.trim();
-      // Match Game of Life quest patterns:
-      // - "Complete the X Puzzle"
-      // - "Complete the X" (for Reflector/Density quests)
       const isGolQuest = headingText.startsWith('Complete the') && 
                         (headingText.includes('Puzzle') || 
                          headingText.includes('Reflector') || 
                          headingText.includes('Density'));
       
       if (isGolQuest) {
-
+        console.log('[Quests] Found quest:', headingText);
         
-        // Find the clickable parent - it's usually a <generic> element with cursor:pointer
-        // Go up until we find an element that contains both h4 AND "Start Quest" text
+        // Find the clickable parent
         let container = h4;
         let clickableCard = null;
         
@@ -656,14 +300,12 @@ async function claimGameOfLifeQuests() {
           container = container.parentElement;
           if (!container) break;
           
-          // Check if this container has both the h4 and "Start Quest" in text
           const hasH4 = container.contains(h4);
           const hasStartQuest = container.textContent.includes('Start Quest');
           
           if (hasH4 && hasStartQuest) {
-            // This is the card - it should be clickable
             clickableCard = container;
-
+            console.log('[Quests] Found clickable card for:', headingText);
             break;
           }
         }
@@ -671,12 +313,12 @@ async function claimGameOfLifeQuests() {
         if (clickableCard) {
           questButtons.push({ button: clickableCard, name: headingText });
         } else {
-
+          console.warn('[Quests] Could not find clickable card for:', headingText);
         }
       }
     }
     
-
+    console.log('[Quests] Found', questButtons.length, 'Game of Life quests');
     
     if (questButtons.length === 0) {
       throw new Error('No Game of Life quests found - they may already be completed or page not loaded');
@@ -687,69 +329,67 @@ async function claimGameOfLifeQuests() {
     
     for (let i = 0; i < questButtons.length; i++) {
       if (!isRunning) {
-
+        console.log('[Quests] Stopped by user');
         break;
       }
       
       const { button, name } = questButtons[i];
-
+      console.log(`[Quests] Processing quest ${i + 1}/${questButtons.length}:`, name);
       
-      // Check if quest already completed (has "Completed" text)
+      // Check if already completed
       const buttonText = button.textContent || '';
       if (buttonText.includes('Completed')) {
-        console.log('[Quests] Already completed (has Completed text), skipping');
+        console.log('[Quests] Already completed, skipping');
         skippedCount++;
         continue;
       }
       
-      // Click the card to open quest dialog
-
-
+      // Click the card
+      console.log('[Quests] Clicking quest card...');
       button.click();
       await sleep(2000);
       
-      // Look for "Check Puzzle" button in the dialog
-
+      // Look for "Check Puzzle" button
+      console.log('[Quests] Looking for Check Puzzle button...');
       await sleep(500);
       
       const dialogButtons = document.querySelectorAll('button');
-
+      console.log('[Quests] Found', dialogButtons.length, 'buttons in dialog');
       let checkPuzzleBtn = null;
       
       for (const btn of dialogButtons) {
         const btnText = btn.textContent.toLowerCase();
         if (btnText.includes('check puzzle')) {
           checkPuzzleBtn = btn;
-
+          console.log('[Quests] Found Check Puzzle button');
           break;
         }
       }
       
       if (checkPuzzleBtn) {
-
+        console.log('[Quests] Clicking Check Puzzle...');
         checkPuzzleBtn.click();
         await sleep(2500);
         
         // Check for success/error messages
         const bodyText = document.body.innerText;
         if (bodyText.includes('successfully') || bodyText.includes('claimed')) {
-
+          console.log('[Quests] ✅ Quest claimed successfully');
           claimedCount++;
         } else if (bodyText.includes('already completed') || bodyText.includes('already claimed')) {
-
+          console.log('[Quests] Already claimed');
           skippedCount++;
         } else {
-
+          console.log('[Quests] Assuming success (no clear message)');
           claimedCount++;
         }
       } else {
-
+        console.warn('[Quests] Check Puzzle button not found');
         console.log('[Quests] Available buttons:', Array.from(dialogButtons).map(b => b.textContent.substring(0, 30)));
-
       }
       
       // Close dialog
-
+      console.log('[Quests] Closing dialog...');
       await sleep(500);
       
       const closeButtons = document.querySelectorAll('button');
@@ -760,7 +400,7 @@ async function claimGameOfLifeQuests() {
         const ariaLabel = btn.getAttribute('aria-label')?.toLowerCase() || '';
         
         if (text === 'close' || ariaLabel.includes('close') || btn.querySelector('svg[class*="close"]')) {
-
+          console.log('[Quests] Found close button');
           btn.click();
           closed = true;
           await sleep(500);
@@ -769,7 +409,7 @@ async function claimGameOfLifeQuests() {
       }
       
       if (!closed) {
-
+        console.log('[Quests] No close button found, trying Escape key');
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
         await sleep(500);
       }
@@ -777,29 +417,24 @@ async function claimGameOfLifeQuests() {
       await sleep(DELAY_BETWEEN_QUESTS);
     }
     
-
-
-
-
+    console.log('[Quests] ✅ Finished!');
+    console.log('[Quests] Claimed:', claimedCount);
+    console.log('[Quests] Skipped:', skippedCount);
+    console.log('[Quests] Total processed:', claimedCount + skippedCount);
     
     if (claimedCount === 0 && skippedCount === questButtons.length) {
-
+      console.log('[Quests] All quests were already completed');
     }
     
   } catch (error) {
-
-    // If error is "no quests found" but page is loaded, maybe all completed
-    if (error.message.includes('No Game of Life quests found')) {
-      throw new Error('No Game of Life quests found - they may all be completed already');
-    }
-    throw error;
+    console.error('[Quests] Error:', error);
     throw error;
   }
 }
 
 // Answer Learn Questions on portal.linera.net/learn
 async function answerLearnQuestions() {
-
+  console.log('[Learn] Starting question answering...');
   
   try {
     // Load answers
@@ -812,7 +447,7 @@ async function answerLearnQuestions() {
     
     // Navigate to learn page if not already there
     if (!window.location.pathname.includes('/learn')) {
-
+      console.log('[Learn] Navigating to /learn...');
       window.location.href = '/learn';
       await sleep(3000);
     }
@@ -821,7 +456,7 @@ async function answerLearnQuestions() {
     await sleep(2000);
     
     // Find all question buttons
-
+    console.log('[Learn] Finding question buttons...');
     const allButtons = document.querySelectorAll('button');
     const questionButtons = [];
     
@@ -832,10 +467,10 @@ async function answerLearnQuestions() {
       }
     }
     
-
+    console.log('[Learn] Found', questionButtons.length, 'questions');
     
     if (questionButtons.length === 0) {
-
+      console.log('[Learn] No questions found');
       return;
     }
     
@@ -844,16 +479,15 @@ async function answerLearnQuestions() {
     
     for (let i = 0; i < questionButtons.length; i++) {
       if (!isRunning) {
-
+        console.log('[Learn] Stopped by user');
         break;
       }
       
       const button = questionButtons[i];
       const questionNum = `Question ${i + 1}`;
-
-
+      console.log(`[Learn] Processing ${questionNum}...`);
       
-      // Check if already answered (has checkmark)
+      // Check if already answered
       const hasCheckmark = button.querySelector('svg.lucide-circle-check-big') ||
                            button.querySelector('svg.lucide-circle-check') ||
                            button.querySelector('.lucide-circle-check') ||
@@ -861,31 +495,29 @@ async function answerLearnQuestions() {
                            button.querySelector('svg[class*="circle-check"]');
       
       if (hasCheckmark) {
-
+        console.log('[Learn] Already answered, skipping');
         skippedCount++;
         continue;
       }
       
       // Click the question button
-
+      console.log('[Learn] Opening question dialog...');
       button.click();
       await sleep(1500);
       
-      // Get the correct answer from our database
+      // Get the correct answer
       const answerData = learnAnswers[questionNum];
       if (!answerData) {
-
-        // Close dialog and continue
+        console.warn('[Learn] No answer found for', questionNum);
         const closeBtn = document.querySelector('button[aria-label="Close"], button:has(svg)');
         if (closeBtn) closeBtn.click();
         await sleep(500);
         continue;
       }
       
-
-
+      console.log('[Learn] Looking for answer:', answerData.answer.substring(0, 50) + '...');
       
-      // Helper function to check if text matches answer (flexible matching)
+      // Helper function to check if text matches answer
       function isAnswerMatch(text, answer) {
         text = text.toLowerCase().trim();
         answer = answer.toLowerCase().trim();
@@ -900,7 +532,7 @@ async function answerLearnQuestions() {
       
       let foundAnswer = false;
       
-      // PRIMARY METHOD: Try input[type="radio"] first
+      // Try input[type="radio"] first
       const inputRadios = document.querySelectorAll('input[type="radio"]');
       
       for (const inputRadio of inputRadios) {
@@ -918,7 +550,7 @@ async function answerLearnQuestions() {
         console.log('[Learn] Checking:', labelText.substring(0, 60));
         
         if (isAnswerMatch(labelText, answerData.answer)) {
-
+          console.log('[Learn] ✅ Found matching answer!');
           inputRadio.click();
           await sleep(300);
           foundAnswer = true;
@@ -926,14 +558,14 @@ async function answerLearnQuestions() {
         }
       }
       
-      // FALLBACK: Try [role="radio"]
+      // Fallback: Try [role="radio"]
       if (!foundAnswer) {
         const radios = document.querySelectorAll('[role="radio"]');
         for (const radio of radios) {
           if (!isRunning) break;
           const label = radio.parentElement?.textContent?.trim() || '';
           if (isAnswerMatch(label, answerData.answer)) {
-
+            console.log('[Learn] ✅ Found matching answer (role=radio)!');
             radio.click();
             await sleep(300);
             foundAnswer = true;
@@ -943,9 +575,9 @@ async function answerLearnQuestions() {
       }
       
       if (!foundAnswer) {
-
+        console.warn('[Learn] ❌ Could not find matching answer');
       } else {
-
+        console.log('[Learn] Selected answer, submitting...');
       }
       
       await sleep(500);
@@ -955,7 +587,7 @@ async function answerLearnQuestions() {
         const submitButtons = document.querySelectorAll('button');
         for (const btn of submitButtons) {
           if (btn.textContent.toLowerCase().includes('submit')) {
-
+            console.log('[Learn] Clicking submit...');
             btn.click();
             await sleep(2000);
             answeredCount++;
@@ -979,15 +611,151 @@ async function answerLearnQuestions() {
       await sleep(DELAY_BETWEEN_QUESTS);
     }
     
-
-
-
+    console.log('[Learn] ✅ Finished!');
+    console.log('[Learn] Answered:', answeredCount);
+    console.log('[Learn] Skipped:', skippedCount);
+    console.log('[Learn] Total processed:', answeredCount + skippedCount);
     
   } catch (error) {
-
+    console.error('[Learn] Error:', error);
     throw error;
   }
 }
 
-// Log when loaded
+// ==================== INJECT SOLVE BUTTON ON PAGE ====================
 
+// Remove button if it exists
+function removeSolveButton() {
+  const button = document.getElementById('linera-solve-btn');
+  if (button) {
+    console.log('[Solver] Removing button');
+    button.remove();
+  }
+}
+
+// Create and inject solve button on puzzle pages
+function injectSolveButton() {
+  console.log('[Solver] Attempting to inject button...');
+  console.log('[Solver] Current URL:', window.location.href);
+  
+  // Check if we're on apps.linera.net/gol
+  if (!window.location.href.includes('apps.linera.net/gol')) {
+    console.log('[Solver] Not on GoL page, removing button if exists');
+    removeSolveButton();
+    return;
+  }
+  
+  // Check if we're on a puzzle page
+  const puzzleId = getPuzzleId();
+  console.log('[Solver] Puzzle ID:', puzzleId);
+  
+  if (!puzzleId) {
+    console.log('[Solver] No puzzle detected, removing button if exists');
+    removeSolveButton();
+    return;
+  }
+  
+  // Check if button already exists
+  if (document.getElementById('linera-solve-btn')) {
+    console.log('[Solver] Button already exists');
+    return;
+  }
+  
+  // Create button
+  const button = document.createElement('button');
+  button.id = 'linera-solve-btn';
+  button.textContent = 'SOLVE';
+  button.style.cssText = `
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 10000;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+    transition: all 0.2s ease;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  `;
+  
+  // Hover effect
+  button.addEventListener('mouseenter', () => {
+    button.style.transform = 'translateY(-1px)';
+    button.style.background = 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)';
+  });
+  
+  button.addEventListener('mouseleave', () => {
+    button.style.transform = 'translateY(0)';
+    button.style.background = 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)';
+  });
+  
+  // Click handler
+  button.addEventListener('click', async () => {
+    // Disable button
+    button.disabled = true;
+    button.style.opacity = '0.6';
+    button.style.cursor = 'not-allowed';
+    const originalText = button.textContent;
+    button.textContent = 'SOLVING...';
+    
+    try {
+      await solveCurrentPuzzle();
+      
+      // Re-enable immediately
+      button.disabled = false;
+      button.style.opacity = '1';
+      button.style.cursor = 'pointer';
+      button.textContent = originalText;
+      
+    } catch (error) {
+      console.error('[Solver] Error:', error);
+      
+      // Show error message
+      alert('Error: ' + error.message);
+      
+      // Re-enable immediately
+      button.disabled = false;
+      button.style.opacity = '1';
+      button.style.cursor = 'pointer';
+      button.textContent = originalText;
+    }
+  });
+  
+  // Add to page
+  document.body.appendChild(button);
+  console.log('[Solver] Injected SOLVE button');
+}
+
+// Inject button when page loads and periodically check
+function startButtonInjection() {
+  console.log('[Solver] Starting button injection system');
+  
+  // Try immediately
+  setTimeout(injectSolveButton, 500);
+  
+  // Try after 1 second
+  setTimeout(injectSolveButton, 1000);
+  
+  // Try after 2 seconds
+  setTimeout(injectSolveButton, 2000);
+  
+  // Check every 1 second - inject or remove button based on page state
+  setInterval(() => {
+    injectSolveButton();
+  }, 1000);
+}
+
+// Start injection system
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', startButtonInjection);
+} else {
+  startButtonInjection();
+}
+
+// Log when loaded
+console.log('[Solver] Content script loaded');
